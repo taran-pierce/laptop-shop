@@ -18,8 +18,11 @@ import {
   TableHead,
   TableRow,
   Stack,
+  AppBar,
+  Toolbar,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import Link from "next/link";
 
 interface SpecItem {
   rank: string;
@@ -70,10 +73,9 @@ function TabPanel(props: TabPanelProps) {
 
 export default function Home() {
   const [tabValue, setTabValue] = useState(0);
-  const [specs, setSpecs] = useState<Record<string, SpecItem[]>>({
-    scar: [],
-    g18: [],
-  });
+  // Start with the same default as server render to avoid hydration mismatch.
+  const [searchTerms, setSearchTerms] = useState<string[]>(["All Specs"]);
+  const [specs, setSpecs] = useState<SpecItem[]>([]);
   const [deals, setDeals] = useState<DealItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,26 +85,31 @@ export default function Home() {
     setError(null);
 
     try {
-      // Fetch both products
-      const [scarRes, g18Res, dealsRes] = await Promise.all([
-        fetch("/api/specs?product=scar"),
-        fetch("/api/specs?product=g18"),
+      const [specsRes, configRes, dealsRes] = await Promise.all([
+        fetch("/api/specs?product=all"),
+        fetch("/api/config"),
         fetch("/api/deals"),
       ]);
 
-      if (!scarRes.ok || !g18Res.ok || !dealsRes.ok) {
+      if (!specsRes.ok || !configRes.ok || !dealsRes.ok) {
         throw new Error("Failed to fetch data");
       }
 
-      const scarData = await scarRes.json();
-      const g18Data = await g18Res.json();
+      const specsData = await specsRes.json();
+      const configData = await configRes.json();
       const dealsData = await dealsRes.json();
 
-      setSpecs({
-        scar: scarData.data || [],
-        g18: g18Data.data || [],
-      });
+      const terms =
+        Array.isArray(configData.searchTerms) && configData.searchTerms.length
+          ? configData.searchTerms
+          : ["All Specs"];
+
+      setSearchTerms(terms);
+      setSpecs(specsData.data || []);
       setDeals(dealsData.data || []);
+
+      // Keep tab index valid when terms list changes
+      setTabValue((current) => Math.min(current, terms.length));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -119,7 +126,21 @@ export default function Home() {
   };
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+    <>
+      <AppBar position="static">
+        <Toolbar>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Laptop Tracker
+          </Typography>
+          <Button color="inherit" component={Link} href="/">
+            Dashboard
+          </Button>
+          <Button color="inherit" component={Link} href="/config">
+            Configure
+          </Button>
+        </Toolbar>
+      </AppBar>
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
       <Paper sx={{ p: 3, mb: 4 }} elevation={3}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <div>
@@ -160,25 +181,42 @@ export default function Home() {
             onChange={handleTabChange}
             aria-label="dashboard tabs"
           >
-            <Tab label="SCAR 18 Specs" id="tab-0" aria-controls="tabpanel-0" />
-            <Tab label="G18 Specs" id="tab-1" aria-controls="tabpanel-1" />
-            <Tab label="Deals" id="tab-2" aria-controls="tabpanel-2" />
+            {(searchTerms.length ? searchTerms : ["All Specs"]).map((term, idx) => (
+              <Tab
+                key={term}
+                label={term}
+                id={`tab-${idx}`}
+                aria-controls={`tabpanel-${idx}`}
+              />
+            ))}
+            <Tab
+              key="deals"
+              label="Deals"
+              id={`tab-${searchTerms.length}`}
+              aria-controls={`tabpanel-${searchTerms.length}`}
+            />
           </Tabs>
 
-          <TabPanel value={tabValue} index={0}>
-            <SpecsTable data={specs.scar} productName="SCAR 18" />
-          </TabPanel>
+          {(searchTerms.length ? searchTerms : ["All Specs"]).map((term, idx) => {
+            const filteredSpecs = specs.filter((row) =>
+              term === "All Specs"
+                ? true
+                : row.title.toLowerCase().includes(term.toLowerCase())
+            );
+            return (
+              <TabPanel value={tabValue} index={idx} key={term}>
+                <SpecsTable data={filteredSpecs} productName={term} />
+              </TabPanel>
+            );
+          })}
 
-          <TabPanel value={tabValue} index={1}>
-            <SpecsTable data={specs.g18} productName="G18" />
-          </TabPanel>
-
-          <TabPanel value={tabValue} index={2}>
+          <TabPanel value={tabValue} index={searchTerms.length}>
             <DealsTable data={deals} />
           </TabPanel>
         </Paper>
       )}
-    </Container>
+      </Container>
+    </>
   );
 }
 

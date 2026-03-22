@@ -5,19 +5,37 @@ import os
 import time
 import random
 import re
+import json
 
 OUTPUT_DIR = "csv_output"
 CSV_FILE = os.path.join(OUTPUT_DIR, "laptop_price_tracking.csv")
+CONFIG_FILE = "scraper_config.json"
 
-SEARCH_TERMS = [
-    "ASUS ROG Strix SCAR 18",
-    "ASUS ROG Strix G18"
-]
+# Load config from JSON, with defaults
+def load_config():
+    global SEARCH_TERMS, PRICE_TARGETS
+    
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                config = json.load(f)
+                SEARCH_TERMS = config.get("searchTerms", ["ASUS ROG Strix SCAR 18", "ASUS ROG Strix G18"])
+                PRICE_TARGETS = config.get("priceTargets", {"SCAR": 2500, "G18": 2100})
+        except Exception as e:
+            log(f"⚠️ Failed to load config: {e}, using defaults")
+            SEARCH_TERMS = ["ASUS ROG Strix SCAR 18", "ASUS ROG Strix G18"]
+            PRICE_TARGETS = {"SCAR": 2500, "G18": 2100}
+    else:
+        SEARCH_TERMS = ["ASUS ROG Strix SCAR 18", "ASUS ROG Strix G18"]
+        PRICE_TARGETS = {"SCAR": 2500, "G18": 2100}
 
+# Initialize with defaults
+SEARCH_TERMS = ["ASUS ROG Strix SCAR 18", "ASUS ROG Strix G18"]
 PRICE_TARGETS = {
     "SCAR": 2500,
     "G18": 2100
-}
+}  # term -> max price for deal, lower is better.
+
 
 def log(msg):
     print(f"[LOG] {msg}")
@@ -40,9 +58,19 @@ def human_scroll(page):
 # ----------------------------
 # FILTER
 # ----------------------------
-def is_relevant(title):
-    title = title.lower()
-    return "scar 18" in title or "g18" in title
+def is_relevant(title, query=None):
+    title_lower = title.lower()
+
+    if query:
+        return query.lower() in title_lower
+
+    # Use configured terms to determine relevance
+    for term in SEARCH_TERMS:
+        if term.lower() in title_lower:
+            return True
+
+    # Fall back to known patterns
+    return "scar 18" in title_lower or "g18" in title_lower
 
 # ----------------------------
 # EXTRACT SPECS
@@ -195,53 +223,65 @@ def check_deals(data):
             continue
         prices_parsed += 1
         title = item["title"]
+        title_lower = title.lower()
         is_deal = False
 
-        if "scar" in title.lower() and price_val <= PRICE_TARGETS["SCAR"]:
-            print(f"🔥 DEAL FOUND (SCAR): ${price_val} - {item['store']}")
-            is_deal = True
-        if "g18" in title.lower() and price_val <= PRICE_TARGETS["G18"]:
-            print(f"🔥 DEAL FOUND (G18): ${price_val} - {item['store']}")
-            is_deal = True
+        # Dynamic target matching from config
+        for term, target in PRICE_TARGETS.items():
+            if term.lower() in title_lower and price_val <= target:
+                print(f"🔥 DEAL FOUND ({term}): ${price_val} - {item['store']}")
+                is_deal = True
+
         if title in lowest_prices and price_val < lowest_prices[title]:
             print(f"📉 NEW LOW PRICE: {title} → ${price_val}")
             is_deal = True
 
         if is_deal:
             deals_found.append(item)
-    
+
     log(f"Prices parsed: {prices_parsed}, failed to parse: {prices_failed}")
     if not deals_found:
-        log(f"ℹ️ No deals found (targets: SCAR ≤${PRICE_TARGETS['SCAR']}, G18 ≤${PRICE_TARGETS['G18']})")
-    
+        log(f"ℹ️ No deals found (targets: {PRICE_TARGETS})")
+
     return deals_found
 
 # ----------------------------
 # SPEC COMPARISON
 # ----------------------------
 def save_spec_comparison_csv(data):
-    # Group results by product type
-    product_groups = {"scar": [], "g18": []}
-    
+    # Group results by configured search terms
+    product_groups = {}
+
+    for term in SEARCH_TERMS:
+        product_groups[term] = []
+    product_groups["unmatched"] = []
+
     for item in data:
         title_lower = item["title"].lower()
-        if "scar 18" in title_lower:
-            product_groups["scar"].append(item)
-        elif "g18" in title_lower:
-            product_groups["g18"].append(item)
-    
+        matched = False
+
+        for term in SEARCH_TERMS:
+            if term.lower() in title_lower:
+                product_groups[term].append(item)
+                matched = True
+                break
+
+        if not matched:
+            product_groups["unmatched"].append(item)
+
     # Process each product group
     for product_name, items in product_groups.items():
         if not items:
             continue
-        
+
         # Sort by price and get top 10
         sorted_items = sorted(items, key=lambda x: clean_price(x["price"]) or float('inf'))
         top_10 = sorted_items[:10]
-        
+
         # Create comparison CSV
         ensure_output_dir()
-        filename = os.path.join(OUTPUT_DIR, f"spec_comparison_{product_name}_{datetime.now().strftime('%Y-%m-%d_%H%M')}.csv")
+        safe_name = product_name.lower().replace(" ", "_").replace("/", "_")
+        filename = os.path.join(OUTPUT_DIR, f"spec_comparison_{safe_name}_{datetime.now().strftime('%Y-%m-%d_%H%M')}.csv")
         
         with open(filename, mode="w", newline="", encoding="utf-8") as file:
             writer = csv.writer(file)
@@ -290,7 +330,7 @@ def scrape_bestbuy(page, query):
             if not title_el or not price_el:
                 continue
             title = title_el.inner_text()
-            if not is_relevant(title):
+            if not is_relevant(title, query):
                 continue
             results.append({
                 "title": title,
@@ -323,7 +363,7 @@ def scrape_newegg(page, query):
             if not title_el or not price_el:
                 continue
             title = title_el.inner_text()
-            if not is_relevant(title):
+            if not is_relevant(title, query):
                 continue
             results.append({
                 "title": title,
@@ -356,7 +396,7 @@ def scrape_bhphoto(page, query):
             if not title_el or not price_el:
                 continue
             title = title_el.inner_text()
-            if not is_relevant(title):
+            if not is_relevant(title, query):
                 continue
             results.append({
                 "title": title,
@@ -372,6 +412,7 @@ def scrape_bhphoto(page, query):
 # MAIN
 # ----------------------------
 def main():
+    load_config()  # Load latest config from JSON
     all_results = []
 
     with sync_playwright() as p:
@@ -379,13 +420,16 @@ def main():
         page = browser.new_page(user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
 
         for term in SEARCH_TERMS:
-            all_results.extend(scrape_bestbuy(page, term))
-            time.sleep(random.uniform(2,5))
+            log(f"🔎 Scraping term: {term}")
 
-            all_results.extend(scrape_newegg(page, term))
-            time.sleep(random.uniform(2,5))
+            term_results = []
+            term_results.extend(scrape_bestbuy(page, term))
+            term_results.extend(scrape_newegg(page, term))
+            term_results.extend(scrape_bhphoto(page, term))
 
-            all_results.extend(scrape_bhphoto(page, term))
+            log(f"✅ {term} results found: {len(term_results)}")
+
+            all_results.extend(term_results)
             time.sleep(random.uniform(2,5))
 
         browser.close()
