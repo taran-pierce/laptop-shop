@@ -8,11 +8,13 @@ export async function GET(req: NextRequest) {
   const productParam = (searchParams.get("product") || "all").toLowerCase();
 
   try {
-    const csvDir = join(process.cwd(), "..", "csv_output");
+    const csvDir = join(process.cwd(), "csv_output");
+    console.log(`[SPECS API] Reading from ${csvDir}, product: ${productParam}`);
 
     // List all spec comparison files
     const files = await readdir(csvDir);
     let specFiles = files.filter((f) => f.startsWith("spec_comparison_"));
+    console.log(`[SPECS API] Found spec files: ${specFiles.join(', ')}`);
 
     if (productParam !== "all") {
       specFiles = specFiles.filter((f) =>
@@ -21,6 +23,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (specFiles.length === 0) {
+      console.log(`[SPECS API] No spec files found for ${productParam}`);
       return NextResponse.json(
         {
           error: `No spec comparison files found for product: ${productParam}`,
@@ -41,22 +44,19 @@ export async function GET(req: NextRequest) {
     const resolved = await Promise.all(fileReads);
     resolved.forEach(({ content }) => {
       const parsed = Papa.parse(content, { header: true });
-      const filteredRows = parsed.data.filter((row: unknown) => {
-        const r = row as Record<string, unknown>;
-        return r && r.rank;
-      });
-      parsedData.push(...filteredRows);
+      console.log(`[SPECS API] Parsed ${parsed.data.length} rows`);
+      parsedData.push(...parsed.data);
     });
 
+    console.log(`[SPECS API] Returning ${parsedData.length} total items`);
     return NextResponse.json({
-      product: productParam,
-      files: specFiles,
       data: parsedData,
+      files: specFiles,
     });
   } catch (error) {
-    console.error("API error:", error);
+    console.error(`[SPECS API] Error: ${error.message}`);
     return NextResponse.json(
-      { error: "Failed to load spec data" },
+      { error: `Failed to load specs: ${error.message}` },
       { status: 500 }
     );
   }

@@ -20,11 +20,11 @@ def load_config():
             with open(CONFIG_FILE, "r") as f:
                 config = json.load(f)
                 SEARCH_TERMS = config.get("searchTerms", ["ASUS ROG Strix SCAR 18", "ASUS ROG Strix G18"])
-                PRICE_TARGETS = config.get("priceTargets", {"SCAR": 2500, "G18": 2100})
+                PRICE_TARGETS = config.get("priceTargets", {"ASUS ROG Strix SCAR 18": 2500, "ASUS ROG Strix G18": 2100})
         except Exception as e:
             log(f"⚠️ Failed to load config: {e}, using defaults")
             SEARCH_TERMS = ["ASUS ROG Strix SCAR 18", "ASUS ROG Strix G18"]
-            PRICE_TARGETS = {"SCAR": 2500, "G18": 2100}
+            PRICE_TARGETS = {"ASUS ROG Strix SCAR 18": 2500, "ASUS ROG Strix G18": 2100}
     else:
         SEARCH_TERMS = ["ASUS ROG Strix SCAR 18", "ASUS ROG Strix G18"]
         PRICE_TARGETS = {"SCAR": 2500, "G18": 2100}
@@ -32,8 +32,8 @@ def load_config():
 # Initialize with defaults
 SEARCH_TERMS = ["ASUS ROG Strix SCAR 18", "ASUS ROG Strix G18"]
 PRICE_TARGETS = {
-    "SCAR": 2500,
-    "G18": 2100
+    "ASUS ROG Strix SCAR 18": 2500,
+    "ASUS ROG Strix G18": 2100
 }  # term -> max price for deal, lower is better.
 
 
@@ -83,21 +83,24 @@ def extract_specs(title):
     cpu = None
     screen = None
 
-    gpu_match = re.search(r"rtx\s?\d{3,4}\s?ti?", title_lower)
+    gpu_match = re.search(r"(?:geforce\s)?rtx\s?(\d{3,4})\s?(ti)?", title_lower)
     if gpu_match:
-        gpu = gpu_match.group()
+        gpu = f"RTX {gpu_match.group(1)}{' Ti' if gpu_match.group(2) else ''}"
 
-    ram_match = re.search(r"\d{2}gb\s?ram", title_lower)
+    # Capture common RAM expressions: 8GB, 16 GB, 32GB RAM, 64 GB DDR5 etc.
+    ram_match = re.search(r"(\d{1,3})\s*gb(?:\s*ram)?", title_lower)
     if ram_match:
-        ram = ram_match.group().replace(" ram","")
+        ram = f"{ram_match.group(1)}GB"
 
-    storage_match = re.search(r"\d(tb|gb)\s?ssd", title_lower)
+    storage_match = re.search(r"(\d{1,4})\s*(tb|gb)(?:\s*(ssd|nvme|pcie))?", title_lower)
     if storage_match:
-        storage = storage_match.group()
+        unit = storage_match.group(2).upper()
+        type_part = storage_match.group(3).upper() if storage_match.group(3) else "SSD"
+        storage = f"{storage_match.group(1)}{unit} {type_part}"
 
-    cpu_match = re.search(r"(i7|i9|ryzen\s?\d)", title_lower)
+    cpu_match = re.search(r"(intel\s?core\s?i[3579]|amd\s?ryzen\s?\d)", title_lower)
     if cpu_match:
-        cpu = cpu_match.group()
+        cpu = cpu_match.group().title()
 
     if "18" in title:
         screen = "18-inch"

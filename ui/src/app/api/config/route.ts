@@ -7,7 +7,7 @@ interface ScraperConfig {
   priceTargets: Record<string, number>;
 }
 
-const CONFIG_FILE = join(process.cwd(), "..", "scraper_config.json");
+const CONFIG_FILE = join(process.cwd(), "..", "..", "scraper_config.json");
 
 async function getConfig(): Promise<ScraperConfig> {
   try {

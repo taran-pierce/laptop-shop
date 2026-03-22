@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { spawn } from "child_process";
-import { join } from "path";
+import { runScraper } from "@/lib/scraper";
 
 function sanitizeLines(text: string) {
   return text
@@ -11,41 +10,26 @@ function sanitizeLines(text: string) {
 }
 
 export async function GET() {
-  const pythonScript = join(process.cwd(), "..", "app.py");
-
   const stream = new ReadableStream({
     start(controller) {
-      const python = spawn("python3", [pythonScript], {
-        cwd: join(process.cwd(), ".."),
-        env: { ...process.env, PYTHONUNBUFFERED: "1" },
-      });
-
-      python.stdout?.on("data", (chunk: Buffer) => {
-        const text = chunk.toString();
-        sanitizeLines(text).forEach((line) => {
+      const logCallback = (msg: string) => {
+        sanitizeLines(msg).forEach((line) => {
           controller.enqueue(`data: ${line}\n\n`);
         });
-      });
+      };
 
-      python.stderr?.on("data", (chunk: Buffer) => {
-        const text = chunk.toString();
-        sanitizeLines(text).forEach((line) => {
-          controller.enqueue(`data: [stderr] ${line}\n\n`);
+      runScraper(logCallback)
+        .then(() => {
+          controller.enqueue(`event: done\ndata: 0\n\n`);
+          controller.close();
+        })
+        .catch((error) => {
+          controller.enqueue(`event: error\ndata: ${error.message}\n\n`);
+          controller.close();
         });
-      });
-
-      python.on("close", (code) => {
-        controller.enqueue(`event: done\ndata: ${code}\n\n`);
-        controller.close();
-      });
-
-      python.on("error", (error) => {
-        controller.enqueue(`event: error\ndata: ${error.message}\n\n`);
-        controller.close();
-      });
     },
     cancel() {
-      // no-op; process closes when done or error
+      // no-op
     },
   });
 

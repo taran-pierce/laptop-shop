@@ -5,7 +5,8 @@
     "Macbook Pro"
   ],
   "priceTargets": {
-    "SCAR": 2500,
-    "G18": 2100
+    "ASUS ROG Strix SCAR 18": 2500,
+    "ASUS ROG Strix G18": 2000,
+    "Macbook Pro": 2500
   }
 }

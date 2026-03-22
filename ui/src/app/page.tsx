@@ -25,7 +25,6 @@ import RefreshIcon from "@mui/icons-material/Refresh";
 import Link from "next/link";
 
 interface SpecItem {
-  rank: string;
   title: string;
   price: string;
   store: string;
@@ -238,7 +237,6 @@ function SpecsTable({
       <Table>
         <TableHead>
           <TableRow sx={{ backgroundColor: "#f5f5f5" }}>
-            <TableCell sx={{ fontWeight: "bold" }}>Rank</TableCell>
             <TableCell sx={{ fontWeight: "bold" }}>Title</TableCell>
             <TableCell sx={{ fontWeight: "bold" }} align="right">
               Price
@@ -254,7 +252,6 @@ function SpecsTable({
         <TableBody>
           {data.map((row, idx) => (
             <TableRow key={idx} hover>
-              <TableCell>{row.rank}</TableCell>
               <TableCell>
                 <a href={row.link} target="_blank" rel="noopener noreferrer">
                   {row.title}
@@ -263,7 +260,11 @@ function SpecsTable({
               <TableCell align="right" sx={{ fontWeight: "bold" }}>
                 {row.price}
               </TableCell>
-              <TableCell>{row.store}</TableCell>
+              <TableCell>
+                <a href={row.link} target="_blank" rel="noopener noreferrer">
+                  {row.store}
+                </a>
+              </TableCell>
               <TableCell>{row.gpu || "—"}</TableCell>
               <TableCell>{row.ram || "—"}</TableCell>
               <TableCell>{row.storage || "—"}</TableCell>
@@ -314,7 +315,11 @@ function DealsTable({ data }: { data: DealItem[] }) {
               <TableCell align="right" sx={{ fontWeight: "bold", color: "#d32f2f" }}>
                 {row.price}
               </TableCell>
-              <TableCell>{row.store}</TableCell>
+              <TableCell>
+                <a href={row.link} target="_blank" rel="noopener noreferrer">
+                  {row.store}
+                </a>
+              </TableCell>
               <TableCell>{row.gpu || "—"}</TableCell>
               <TableCell>{row.ram || "—"}</TableCell>
               <TableCell>{row.storage || "—"}</TableCell>
